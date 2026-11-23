@@ -13,7 +13,19 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Carlicos Portal">
 
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=352">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+                for (var i = 0; i < regs.length; i++) regs[i].unregister();
+            });
+        }
+        if ('caches' in window) {
+            caches.keys().then(function (names) {
+                for (var i = 0; i < names.length; i++) caches.delete(names[i]);
+            });
+        }
+    </script>
 </head>
 <body>
     <!-- Cabecera Fija -->
@@ -129,21 +141,64 @@
 
             <!-- 2.2 Dashboard Maestro (oculto hasta login) -->
             <div id="masterDashboard" class="hidden">
-                <div class="master-toolbar">
-                    <button id="btnMasterRefresh" class="btn btn-secondary" type="button">
-                        <span>↻ Actualizar dispositivos</span>
-                    </button>
-                    <button id="btnMasterLogout" class="btn btn-secondary" type="button">
-                        <span>Cerrar sesión maestra</span>
-                    </button>
+                <!-- Sub-vista A: Lista de Dispositivos Registrados -->
+                <div id="masterDevicesListView">
+                    <div class="master-toolbar">
+                        <button id="btnMasterRefresh" class="btn btn-secondary" type="button">
+                            <span>↻ Actualizar dispositivos</span>
+                        </button>
+                        <button id="btnMasterLogout" class="btn btn-secondary" type="button">
+                            <span>Cerrar sesión maestra</span>
+                        </button>
+                    </div>
+
+                    <div class="section-header">
+                        <div class="section-title">Televisores Registrados (<span id="masterDeviceCount">0</span>)</div>
+                    </div>
+
+                    <div id="masterDevicesList">
+                        <!-- Rellenado dinámicamente -->
+                    </div>
                 </div>
 
-                <div class="section-header">
-                    <div class="section-title">Televisores Registrados (<span id="masterDeviceCount">0</span>)</div>
-                </div>
+                <!-- Sub-vista B: Detalle y Listas de una TV seleccionada (oculta por defecto) -->
+                <div id="masterDeviceDetailView" class="hidden">
+                    <div class="master-detail-header">
+                        <button id="btnMasterBackToDevices" class="btn btn-secondary" type="button">
+                            <span>← Volver a dispositivos</span>
+                        </button>
+                        <button id="btnMasterAddPlaylistForDevice" class="btn btn-primary" type="button">
+                            <span>+ Añadir Lista Xtream</span>
+                        </button>
+                    </div>
 
-                <div id="masterDevicesList">
-                    <!-- Rellenado dinámicamente -->
+                    <!-- Tarjeta resumen de la TV seleccionada -->
+                    <div id="masterDetailTvSummary" class="card master-tv-summary-card">
+                        <div class="master-device-header">
+                            <span id="masterDetailTvAlias" class="master-device-alias">TV Salón</span>
+                            <span id="masterDetailTvBadge" class="status-badge active">ACTIVA</span>
+                        </div>
+                        <div class="master-meta-row">
+                            <div class="master-meta-item mono"><strong>MAC:</strong> <span id="masterDetailTvMac">--</span></div>
+                            <div class="master-meta-item mono"><strong>Device Key:</strong> <span id="masterDetailTvKey">--</span></div>
+                            <div class="master-meta-item"><strong>Plataforma:</strong> <span id="masterDetailTvPlatform">--</span></div>
+                            <div class="master-meta-item"><strong>Última conex.:</strong> <span id="masterDetailTvLastSeen">--</span></div>
+                            <div class="master-meta-item"><strong>Listas Xtream:</strong> <span id="masterDetailTvPlCount">0</span></div>
+                        </div>
+                        <div class="master-summary-actions">
+                            <button id="btnMasterDetailEditTv" class="btn btn-secondary" type="button">
+                                <span>Editar TV</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="section-header">
+                        <div class="section-title">Listas Xtream del Televisor</div>
+                    </div>
+
+                    <div id="masterDevicePlaylistsContainer">
+                        <!-- Rellenado dinámicamente -->
+                    </div>
                 </div>
             </div>
         </section>
@@ -159,6 +214,7 @@
             </div>
             <form id="formPlaylistModal">
                 <input type="hidden" id="modalPlaylistId" value="">
+                <input type="hidden" id="modalPlaylistTargetMac" value="">
                 
                 <div class="form-group">
                     <label class="form-label" for="modalPlName">Nombre de la lista</label>
@@ -235,37 +291,9 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         MODAL 3: GESTOR DE LISTAS DE UN DISPOSITIVO (Panel Maestro)
-         ============================================================ -->
-    <div id="modalMasterPlaylists" class="modal-overlay hidden" role="dialog" aria-modal="true">
-        <div class="modal-box" style="max-width: 680px;">
-            <div class="modal-title">
-                <div>
-                    <span id="modalMasterPlTitle">Listas de Televisor</span>
-                    <div id="modalMasterPlSubtitle" style="font-size: 0.82rem; color: var(--text-muted); font-family: var(--font-mono); font-weight: normal; margin-top: 4px;">--</div>
-                </div>
-            </div>
-
-            <div class="section-header" style="margin-top: 10px;">
-                <button id="btnMasterAddPlaylistForDevice" class="btn btn-primary" type="button">
-                    <span>+ Añadir Lista Xtream</span>
-                </button>
-            </div>
-
-            <div id="modalMasterPlaylistsContainer" style="max-height: 50vh; overflow-y: auto; margin-bottom: 20px;">
-                <!-- Rellenado dinámicamente -->
-            </div>
-
-            <div class="modal-actions">
-                <button type="button" id="btnCloseMasterPlaylistsModal" class="btn btn-secondary">Cerrar</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Toast Container -->
     <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=352"></script>
 </body>
 </html>

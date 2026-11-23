@@ -122,6 +122,9 @@
         var paneMaster = document.getElementById('paneMaster');
 
         if (tab === 'ibo') {
+            closePlaylistModal();
+            closeEditDeviceModal();
+            closeMasterDeviceDetail();
             btnIbo.className = 'tab-btn active';
             btnMaster.className = 'tab-btn';
             paneIbo.className = 'tab-pane active';
@@ -264,6 +267,32 @@
             usrEl.textContent = 'Usuario: ' + (pl.username || '--');
             details.appendChild(srvEl);
             details.appendChild(usrEl);
+
+            var passRow = document.createElement('div');
+            passRow.className = 'playlist-pass-row';
+            var passLabel = document.createElement('span');
+            passLabel.textContent = 'Contraseña: ';
+            var passVal = document.createElement('span');
+            passVal.className = 'playlist-pass-val';
+            var rawPass = pl.password || pl.pass || '';
+            var isRevealed = false;
+            passVal.textContent = rawPass ? '••••••••' : '--';
+
+            passRow.appendChild(passLabel);
+            passRow.appendChild(passVal);
+            if (rawPass) {
+                var btnEye = document.createElement('button');
+                btnEye.type = 'button';
+                btnEye.className = 'btn-toggle-eye-mini';
+                btnEye.setAttribute('aria-label', 'Mostrar u ocultar contraseña');
+                btnEye.textContent = '👁️';
+                btnEye.onclick = function () {
+                    isRevealed = !isRevealed;
+                    passVal.textContent = isRevealed ? rawPass : '••••••••';
+                };
+                passRow.appendChild(btnEye);
+            }
+            details.appendChild(passRow);
             card.appendChild(details);
 
             var actions = document.createElement('div');
@@ -435,6 +464,8 @@
     function renderMasterDashboard() {
         var loginForm = document.getElementById('masterLoginForm');
         var dashboard = document.getElementById('masterDashboard');
+        var listView = document.getElementById('masterDevicesListView');
+        var detailView = document.getElementById('masterDeviceDetailView');
 
         if (!state.masterPassword) {
             if (loginForm) loginForm.style.display = 'block';
@@ -444,6 +475,16 @@
 
         if (loginForm) loginForm.style.display = 'none';
         if (dashboard) dashboard.className = '';
+
+        // Mantener o restaurar la sub-vista adecuada
+        if (state.activeMasterDevice) {
+            if (listView) listView.className = 'hidden';
+            if (detailView) detailView.className = '';
+            renderMasterDeviceDetailSummary(state.activeMasterDevice);
+        } else {
+            if (listView) listView.className = '';
+            if (detailView) detailView.className = 'hidden';
+        }
 
         var countEl = document.getElementById('masterDeviceCount');
         if (countEl) countEl.textContent = state.masterDevices.length;
@@ -508,7 +549,7 @@
             btnManagePl.className = 'btn btn-primary';
             btnManagePl.textContent = 'Gestionar Listas';
             btnManagePl.onclick = function () {
-                openMasterPlaylistsModal(dev);
+                openMasterDeviceDetail(dev);
             };
             actions.appendChild(btnManagePl);
 
@@ -529,6 +570,13 @@
         state.masterPassword = '';
         sessionStorage.removeItem('carlicos_master_session');
         state.masterDevices = [];
+        state.activeMasterDevice = null;
+        closePlaylistModal();
+        closeEditDeviceModal();
+        var listView = document.getElementById('masterDevicesListView');
+        var detailView = document.getElementById('masterDeviceDetailView');
+        if (listView) listView.className = '';
+        if (detailView) detailView.className = 'hidden';
         var passInput = document.getElementById('masterInputPass');
         if (passInput) passInput.value = '';
         renderMasterDashboard();
@@ -586,6 +634,15 @@
                 showToast('Televisor actualizado con éxito', 'success');
                 closeEditDeviceModal();
                 await loadMasterDevices();
+                if (state.activeMasterDevice && state.activeMasterDevice.mac === mac) {
+                    for (var k = 0; k < state.masterDevices.length; k++) {
+                        if (state.masterDevices[k].mac === mac) {
+                            state.activeMasterDevice = state.masterDevices[k];
+                            renderMasterDeviceDetailSummary(state.activeMasterDevice);
+                            break;
+                        }
+                    }
+                }
             } else {
                 showToast('Error al actualizar televisor', 'error');
             }
@@ -610,7 +667,11 @@
             var res = await callRpc('master_delete_device', payload);
             if (res && res.ok) {
                 showToast('Televisor eliminado', 'success');
-                await loadMasterDevices();
+                if (state.activeMasterDevice && state.activeMasterDevice.mac === dev.mac) {
+                    closeMasterDeviceDetail();
+                } else {
+                    await loadMasterDevices();
+                }
             } else {
                 showToast('No se pudo eliminar el televisor', 'error');
             }
@@ -619,37 +680,83 @@
         }
     }
 
-    // Modal Gestión de Listas de una TV (Panel Maestro)
-    async function openMasterPlaylistsModal(dev) {
+    // ============================================================
+    // 5. SUB-VISTA DETALLE Y GESTIÓN DE LISTAS DE UN TELEVISOR
+    // ============================================================
+    function openMasterDeviceDetail(dev) {
         state.activeMasterDevice = dev;
-        var modal = document.getElementById('modalMasterPlaylists');
-        var title = document.getElementById('modalMasterPlTitle');
-        var sub = document.getElementById('modalMasterPlSubtitle');
 
-        if (title) title.textContent = 'Listas: ' + (dev.alias || 'Sin alias');
-        if (sub) sub.textContent = 'MAC: ' + dev.mac + ' · Key: ' + (dev.key || dev.device_key || '------');
+        var macField = document.getElementById('modalPlaylistTargetMac');
+        if (macField) macField.value = dev.mac;
 
-        if (modal) modal.className = 'modal-overlay';
-        await loadMasterDevicePlaylists();
+        renderMasterDeviceDetailSummary(dev);
+
+        var listView = document.getElementById('masterDevicesListView');
+        var detailView = document.getElementById('masterDeviceDetailView');
+        if (listView) listView.className = 'hidden';
+        if (detailView) detailView.className = '';
+
+        window.scrollTo(0, 0);
+        loadMasterDevicePlaylists();
     }
 
-    function closeMasterPlaylistsModal() {
+    function renderMasterDeviceDetailSummary(dev) {
+        if (!dev) return;
+        var aliasEl = document.getElementById('masterDetailTvAlias');
+        var badgeEl = document.getElementById('masterDetailTvBadge');
+        var macEl = document.getElementById('masterDetailTvMac');
+        var keyEl = document.getElementById('masterDetailTvKey');
+        var platEl = document.getElementById('masterDetailTvPlatform');
+        var lastEl = document.getElementById('masterDetailTvLastSeen');
+        var countEl = document.getElementById('masterDetailTvPlCount');
+        var btnEditTv = document.getElementById('btnMasterDetailEditTv');
+
+        if (aliasEl) {
+            aliasEl.textContent = dev.alias || 'Sin alias configurado';
+            aliasEl.className = 'master-device-alias' + (!dev.alias ? ' no-alias' : '');
+        }
+        if (badgeEl) {
+            badgeEl.className = 'status-badge ' + (dev.is_active ? 'active' : 'paused');
+            badgeEl.textContent = dev.is_active ? 'ACTIVA' : 'PAUSADA';
+        }
+        if (macEl) macEl.textContent = dev.mac;
+        if (keyEl) keyEl.textContent = dev.key || dev.device_key || '------';
+        if (platEl) platEl.textContent = (dev.platform || 'samsung-tizen') + ' v' + (dev.app_version || '3.5.0');
+        if (lastEl) lastEl.textContent = formatDate(dev.last_seen);
+        if (countEl) {
+            var plCount = (dev.playlists_count !== undefined) ? dev.playlists_count : ((dev.playlists && dev.playlists.length) || 0);
+            countEl.textContent = plCount;
+        }
+        if (btnEditTv) {
+            btnEditTv.onclick = function () {
+                openEditDeviceModal(dev);
+            };
+        }
+    }
+
+    function closeMasterDeviceDetail() {
         state.activeMasterDevice = null;
-        var modal = document.getElementById('modalMasterPlaylists');
-        if (modal) modal.className = 'modal-overlay hidden';
+        var listView = document.getElementById('masterDevicesListView');
+        var detailView = document.getElementById('masterDeviceDetailView');
+        if (listView) listView.className = '';
+        if (detailView) detailView.className = 'hidden';
+        loadMasterDevices();
     }
 
     async function loadMasterDevicePlaylists() {
         if (!state.activeMasterDevice) return;
-        var container = document.getElementById('modalMasterPlaylistsContainer');
+        var container = document.getElementById('masterDevicePlaylistsContainer');
         if (!container) return;
-        container.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-muted);">Cargando listas del servidor...</div>';
+        container.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-muted);">Cargando listas del televisor...</div>';
 
         try {
             var dev = state.activeMasterDevice;
             var devKey = dev.key || dev.device_key || '';
             var data = await callRpc('ibo_get_device', { p_mac: dev.mac, p_key: devKey });
             var playlists = (data && data.playlists) ? data.playlists : [];
+
+            var countEl = document.getElementById('masterDetailTvPlCount');
+            if (countEl) countEl.textContent = playlists.length;
 
             renderMasterPlaylistsList(playlists);
         } catch (err) {
@@ -658,12 +765,12 @@
     }
 
     function renderMasterPlaylistsList(playlists) {
-        var container = document.getElementById('modalMasterPlaylistsContainer');
+        var container = document.getElementById('masterDevicePlaylistsContainer');
         if (!container) return;
         container.innerHTML = '';
 
         if (!playlists || playlists.length === 0) {
-            container.innerHTML = '<div class="empty-state">Este televisor no tiene listas Xtream configuradas.</div>';
+            container.innerHTML = '<div class="empty-state">Este televisor no tiene listas Xtream configuradas. Pulsa "+ Añadir Lista Xtream" arriba para asignar una.</div>';
             return;
         }
 
@@ -696,6 +803,32 @@
             usrEl.textContent = 'Usuario: ' + (pl.username || '--');
             details.appendChild(srvEl);
             details.appendChild(usrEl);
+
+            var passRow = document.createElement('div');
+            passRow.className = 'playlist-pass-row';
+            var passLabel = document.createElement('span');
+            passLabel.textContent = 'Contraseña: ';
+            var passVal = document.createElement('span');
+            passVal.className = 'playlist-pass-val';
+            var rawPass = pl.password || pl.pass || '';
+            var isRevealed = false;
+            passVal.textContent = rawPass ? '••••••••' : '--';
+
+            passRow.appendChild(passLabel);
+            passRow.appendChild(passVal);
+            if (rawPass) {
+                var btnEye = document.createElement('button');
+                btnEye.type = 'button';
+                btnEye.className = 'btn-toggle-eye-mini';
+                btnEye.setAttribute('aria-label', 'Mostrar u ocultar contraseña');
+                btnEye.textContent = '👁️';
+                btnEye.onclick = function () {
+                    isRevealed = !isRevealed;
+                    passVal.textContent = isRevealed ? rawPass : '••••••••';
+                };
+                passRow.appendChild(btnEye);
+            }
+            details.appendChild(passRow);
             card.appendChild(details);
 
             var actions = document.createElement('div');
@@ -734,10 +867,12 @@
 
     async function masterMakePlaylistDefault(pl) {
         if (!state.activeMasterDevice) return;
+        var dev = state.activeMasterDevice;
+        var devKey = dev.key || dev.device_key || '';
         try {
             var payload = {
                 p_password: state.masterPassword,
-                p_mac: state.activeMasterDevice.mac,
+                p_mac: dev.mac,
                 p_id: pl.id,
                 p_name: pl.name,
                 p_server: pl.server,
@@ -745,7 +880,25 @@
                 p_pass: pl.password,
                 p_is_default: true
             };
-            var res = await callRpc('master_upsert_playlist', payload);
+            var res = null;
+            try {
+                res = await callRpc('master_upsert_playlist', payload);
+            } catch (e) {
+                if (devKey) {
+                    res = await callRpc('ibo_upsert_playlist', {
+                        p_id: pl.id,
+                        p_mac: dev.mac,
+                        p_key: devKey,
+                        p_name: pl.name,
+                        p_server: pl.server,
+                        p_user: pl.username,
+                        p_pass: pl.password,
+                        p_is_default: true
+                    });
+                } else {
+                    throw e;
+                }
+            }
             if (res && res.ok) {
                 showToast('Lista principal actualizada', 'success');
                 await loadMasterDevicePlaylists();
@@ -761,14 +914,28 @@
     async function masterDeletePlaylist(pl) {
         if (!state.activeMasterDevice) return;
         if (!confirm('¿Eliminar la lista "' + pl.name + '"?')) return;
+        var dev = state.activeMasterDevice;
+        var devKey = dev.key || dev.device_key || '';
 
         try {
-            var payload = {
-                p_password: state.masterPassword,
-                p_mac: state.activeMasterDevice.mac,
-                p_id: pl.id
-            };
-            var res = await callRpc('master_delete_playlist', payload);
+            var res = null;
+            try {
+                res = await callRpc('master_delete_playlist', {
+                    p_password: state.masterPassword,
+                    p_mac: dev.mac,
+                    p_id: pl.id
+                });
+            } catch (e) {
+                if (devKey) {
+                    res = await callRpc('ibo_delete_playlist', {
+                        p_mac: dev.mac,
+                        p_key: devKey,
+                        p_id: pl.id
+                    });
+                } else {
+                    throw e;
+                }
+            }
             if (res && res.ok) {
                 showToast('Lista eliminada', 'success');
                 await loadMasterDevicePlaylists();
@@ -785,7 +952,19 @@
     // 6. MODAL COMÚN DE LISTA XTREAM
     // ============================================================
     function openPlaylistModal(mode, plItem) {
-        state.playlistModalContext = { mode: mode, item: plItem || null };
+        var targetDev = (mode === 'master') ? state.activeMasterDevice : state.iboDevice;
+        var macField = document.getElementById('modalPlaylistTargetMac');
+        var targetMac = (targetDev && targetDev.mac) ? targetDev.mac : (macField ? macField.value : '');
+
+        state.playlistModalContext = {
+            mode: mode,
+            item: plItem || null,
+            targetDevice: targetDev || null
+        };
+
+        if (macField && targetMac) {
+            macField.value = targetMac;
+        }
 
         var modal = document.getElementById('modalPlaylist');
         var title = document.getElementById('modalPlaylistTitle');
@@ -801,7 +980,10 @@
         if (nameField) nameField.value = plItem ? plItem.name : '';
         if (serverField) serverField.value = plItem ? plItem.server : '';
         if (userField) userField.value = plItem ? (plItem.username || plItem.user || '') : '';
-        if (passField) passField.value = plItem ? (plItem.password || plItem.pass || '') : '';
+        if (passField) {
+            passField.value = plItem ? (plItem.password || plItem.pass || '') : '';
+            passField.type = 'password';
+        }
         if (defField) defField.checked = plItem ? Boolean(plItem.is_default) : false;
 
         if (modal) modal.className = 'modal-overlay';
@@ -860,10 +1042,20 @@
                     showToast('Error al guardar la lista', 'error');
                 }
             } else if (ctx.mode === 'master') {
-                if (!state.activeMasterDevice) throw new Error('No hay dispositivo activo');
+                var macInput = document.getElementById('modalPlaylistTargetMac');
+                var macVal = (macInput && macInput.value) ? macInput.value.trim() : '';
+                var targetDev = ctx.targetDevice || state.activeMasterDevice;
+                var finalMac = (targetDev && targetDev.mac) ? targetDev.mac : macVal;
+
+                if (!finalMac) {
+                    throw new Error('No se pudo identificar el televisor destino para guardar la lista');
+                }
+
+                var devKey = (targetDev && (targetDev.key || targetDev.device_key)) || '';
+
                 var payloadMaster = {
                     p_password: state.masterPassword,
-                    p_mac: state.activeMasterDevice.mac,
+                    p_mac: finalMac,
                     p_id: idVal,
                     p_name: name,
                     p_server: server,
@@ -871,14 +1063,73 @@
                     p_pass: pass,
                     p_is_default: isDef
                 };
-                var resMaster = await callRpc('master_upsert_playlist', payloadMaster);
+
+                var resMaster = null;
+                try {
+                    resMaster = await callRpc('master_upsert_playlist', payloadMaster);
+                } catch (rpcErr) {
+                    if (devKey) {
+                        resMaster = await callRpc('ibo_upsert_playlist', {
+                            p_id: idVal,
+                            p_mac: finalMac,
+                            p_key: devKey,
+                            p_name: name,
+                            p_server: server,
+                            p_user: user,
+                            p_pass: pass,
+                            p_is_default: isDef
+                        });
+                    } else {
+                        throw rpcErr;
+                    }
+                }
+
                 if (resMaster && resMaster.ok) {
                     showToast('Lista guardada en televisor', 'success');
                     closePlaylistModal();
                     await loadMasterDevicePlaylists();
                     await loadMasterDevices();
+                    if (state.masterDevices && targetDev) {
+                        for (var i = 0; i < state.masterDevices.length; i++) {
+                            if (state.masterDevices[i].mac === targetDev.mac) {
+                                state.activeMasterDevice = state.masterDevices[i];
+                                renderMasterDeviceDetailSummary(state.activeMasterDevice);
+                                break;
+                            }
+                        }
+                    }
+                } else if (devKey) {
+                    var resFallback = await callRpc('ibo_upsert_playlist', {
+                        p_id: idVal,
+                        p_mac: finalMac,
+                        p_key: devKey,
+                        p_name: name,
+                        p_server: server,
+                        p_user: user,
+                        p_pass: pass,
+                        p_is_default: isDef
+                    });
+                    if (resFallback && resFallback.ok) {
+                        showToast('Lista guardada en televisor', 'success');
+                        closePlaylistModal();
+                        await loadMasterDevicePlaylists();
+                        await loadMasterDevices();
+                        if (state.masterDevices && targetDev) {
+                            for (var j = 0; j < state.masterDevices.length; j++) {
+                                if (state.masterDevices[j].mac === targetDev.mac) {
+                                    state.activeMasterDevice = state.masterDevices[j];
+                                    renderMasterDeviceDetailSummary(state.activeMasterDevice);
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        var errMsg = (resFallback && resFallback.error) || (resMaster && resMaster.error) || 'Error al guardar lista en televisor';
+                        showToast(errMsg, 'error');
+                    }
                 } else {
-                    showToast('Error al guardar lista en televisor', 'error');
+                    var errMsgMaster = (resMaster && resMaster.error) ? resMaster.error : 'Error al guardar lista en televisor';
+                    showToast(errMsgMaster, 'error');
                 }
             }
         } catch (err) {
@@ -929,6 +1180,9 @@
         var btnMasterLogout = document.getElementById('btnMasterLogout');
         if (btnMasterLogout) btnMasterLogout.addEventListener('click', handleMasterLogout);
 
+        var btnBackToDevs = document.getElementById('btnMasterBackToDevices');
+        if (btnBackToDevs) btnBackToDevs.addEventListener('click', closeMasterDeviceDetail);
+
         var btnMasterAddPl = document.getElementById('btnMasterAddPlaylistForDevice');
         if (btnMasterAddPl) btnMasterAddPl.addEventListener('click', function () {
             openPlaylistModal('master', null);
@@ -947,9 +1201,6 @@
         var formDev = document.getElementById('formEditDeviceModal');
         if (formDev) formDev.addEventListener('submit', handleSaveDevice);
 
-        var btnCloseMasterPl = document.getElementById('btnCloseMasterPlaylistsModal');
-        if (btnCloseMasterPl) btnCloseMasterPl.addEventListener('click', closeMasterPlaylistsModal);
-
         // Ojos de contraseña
         var btnEyeMaster = document.getElementById('btnToggleMasterPass');
         if (btnEyeMaster) {
@@ -967,10 +1218,7 @@
             });
         }
 
-        // PWA Service Worker
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js').catch(function () {});
-        }
+        // PWA Service Worker desactivado para evitar problemas de caché
     }
 
     if (document.readyState === 'loading') {

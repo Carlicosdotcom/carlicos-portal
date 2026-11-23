@@ -535,6 +535,35 @@ body {
     flex-wrap: wrap;
 }
 
+/* Sub-vista Detalle de TV en Panel Maestro */
+.master-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.master-tv-summary-card {
+    margin-bottom: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.master-summary-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
 /* Modales */
 .modal-overlay {
     position: fixed;
@@ -550,6 +579,51 @@ body {
     justify-content: center;
     z-index: 200;
     padding: 16px;
+}
+
+#modalPlaylist {
+    z-index: 300;
+}
+
+.playlist-pass-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.playlist-pass-val {
+    font-family: var(--font-mono);
+    color: var(--accent-gold);
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border-card);
+    padding: 2px 10px;
+    border-radius: 6px;
+    letter-spacing: 1.5px;
+    font-weight: 600;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.btn-toggle-eye-mini {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-card);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    transition: all 0.15s ease;
+}
+
+.btn-toggle-eye-mini:hover {
+    background: rgba(217, 30, 42, 0.25);
+    border-color: var(--accent-red);
 }
 
 .modal-overlay.hidden {
