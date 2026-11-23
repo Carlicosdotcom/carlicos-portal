@@ -16,7 +16,14 @@
         masterPassword: sessionStorage.getItem('carlicos_master_session') || '',
         masterDevices: [],
         activeMasterDevice: null, // TV cuyas listas se están gestionando
-        playlistModalContext: null // { mode: 'ibo' | 'master', item: null }
+        playlistModalContext: null, // { mode: 'ibo' | 'master', item: null }
+        masterFilters: {
+            search: '',
+            status: 'all',
+            platform: 'all',
+            sort: 'last_seen'
+        },
+        copyingPlaylist: null
     };
 
     // ============================================================
@@ -125,6 +132,8 @@
             closePlaylistModal();
             closeEditDeviceModal();
             closeMasterDeviceDetail();
+            closeBulkServerModal();
+            closeCopyPlaylistModal();
             btnIbo.className = 'tab-btn active';
             btnMaster.className = 'tab-btn';
             paneIbo.className = 'tab-pane active';
@@ -461,6 +470,81 @@
         }
     }
 
+    function getFilteredAndSortedMasterDevices() {
+        var list = state.masterDevices.slice();
+        var search = (state.masterFilters.search || '').toLowerCase().trim();
+        var status = state.masterFilters.status || 'all';
+        var platform = state.masterFilters.platform || 'all';
+        var sort = state.masterFilters.sort || 'last_seen';
+
+        // 1. Filtro de búsqueda en tiempo real
+        if (search) {
+            list = list.filter(function (dev) {
+                var aliasMatch = dev.alias && dev.alias.toLowerCase().indexOf(search) !== -1;
+                var macMatch = dev.mac && dev.mac.toLowerCase().indexOf(search) !== -1;
+                var keyVal = (dev.key || dev.device_key || '').toLowerCase();
+                var keyMatch = keyVal.indexOf(search) !== -1;
+                var plMatch = false;
+                if (dev.playlists && Array.isArray(dev.playlists)) {
+                    for (var i = 0; i < dev.playlists.length; i++) {
+                        var p = dev.playlists[i];
+                        if (p.name && p.name.toLowerCase().indexOf(search) !== -1) {
+                            plMatch = true;
+                            break;
+                        }
+                        if (p.server && p.server.toLowerCase().indexOf(search) !== -1) {
+                            plMatch = true;
+                            break;
+                        }
+                    }
+                }
+                return aliasMatch || macMatch || keyMatch || plMatch;
+            });
+        }
+
+        // 2. Filtro de Estado
+        if (status === 'active') {
+            list = list.filter(function (dev) { return dev.is_active === true; });
+        } else if (status === 'paused') {
+            list = list.filter(function (dev) { return dev.is_active === false; });
+        }
+
+        // 3. Filtro de Plataforma
+        if (platform !== 'all') {
+            list = list.filter(function (dev) {
+                var p = (dev.platform || '').toLowerCase();
+                if (platform === 'samsung-tizen') return p.indexOf('tizen') !== -1;
+                if (platform === 'lg-webos') return p.indexOf('webos') !== -1;
+                if (platform === 'android') return p.indexOf('android') !== -1;
+                return p === platform;
+            });
+        }
+
+        // 4. Ordenación
+        if (sort === 'alias') {
+            list.sort(function (a, b) {
+                var nameA = (a.alias || 'zzz').toLowerCase();
+                var nameB = (b.alias || 'zzz').toLowerCase();
+                return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+            });
+        } else if (sort === 'playlists') {
+            list.sort(function (a, b) {
+                var countA = (a.playlists_count !== undefined) ? a.playlists_count : ((a.playlists && a.playlists.length) || 0);
+                var countB = (b.playlists_count !== undefined) ? b.playlists_count : ((b.playlists && b.playlists.length) || 0);
+                return countB - countA;
+            });
+        } else {
+            // 'last_seen' por defecto (más reciente primero)
+            list.sort(function (a, b) {
+                var timeA = a.last_seen ? new Date(a.last_seen).getTime() : 0;
+                var timeB = b.last_seen ? new Date(b.last_seen).getTime() : 0;
+                return timeB - timeA;
+            });
+        }
+
+        return list;
+    }
+
     function renderMasterDashboard() {
         var loginForm = document.getElementById('masterLoginForm');
         var dashboard = document.getElementById('masterDashboard');
@@ -492,8 +576,16 @@
             if (detailView) detailView.classList.add('hidden');
         }
 
+        var filtered = getFilteredAndSortedMasterDevices();
+
         var countEl = document.getElementById('masterDeviceCount');
-        if (countEl) countEl.textContent = state.masterDevices.length;
+        if (countEl) {
+            if (filtered.length === state.masterDevices.length) {
+                countEl.textContent = state.masterDevices.length;
+            } else {
+                countEl.textContent = filtered.length + ' de ' + state.masterDevices.length;
+            }
+        }
 
         var container = document.getElementById('masterDevicesList');
         if (!container) return;
@@ -504,71 +596,94 @@
             return;
         }
 
-        state.masterDevices.forEach(function (dev) {
-            var card = document.createElement('div');
-            card.className = 'master-device-card';
+        if (filtered.length === 0) {
+            container.innerHTML = '<div class="empty-state">No hay televisores que coincidan con los filtros de búsqueda.</div>';
+            return;
+        }
 
-            // Cabecera de la tarjeta: Alias y Badge de estado
-            var header = document.createElement('div');
-            header.className = 'master-device-header';
+        // Vista compacta en filas: 10-12 televisores de un vistazo
+        filtered.forEach(function (dev) {
+            var row = document.createElement('div');
+            row.className = 'master-device-row';
+
+            var main = document.createElement('div');
+            main.className = 'master-row-main';
+
+            var titleRow = document.createElement('div');
+            titleRow.className = 'master-row-title-row';
 
             var aliasEl = document.createElement('span');
-            aliasEl.className = 'master-device-alias' + (!dev.alias ? ' no-alias' : '');
+            aliasEl.className = 'master-row-alias' + (!dev.alias ? ' no-alias' : '');
             aliasEl.textContent = dev.alias || 'Sin alias configurado';
-            header.appendChild(aliasEl);
+            titleRow.appendChild(aliasEl);
 
-            var badge = document.createElement('span');
-            badge.className = 'status-badge ' + (dev.is_active ? 'active' : 'paused');
-            badge.textContent = dev.is_active ? 'ACTIVA' : 'PAUSADA';
-            header.appendChild(badge);
+            var statusBadge = document.createElement('span');
+            statusBadge.className = 'status-badge ' + (dev.is_active ? 'active' : 'paused');
+            statusBadge.textContent = dev.is_active ? 'ACTIVA' : 'PAUSADA';
+            titleRow.appendChild(statusBadge);
 
-            card.appendChild(header);
+            var platName = 'Tizen';
+            var platLow = (dev.platform || '').toLowerCase();
+            if (platLow.indexOf('webos') !== -1) platName = 'webOS';
+            else if (platLow.indexOf('android') !== -1) platName = 'Android';
+            else if (platLow.indexOf('tizen') !== -1) platName = 'Tizen';
+            else if (dev.platform) platName = dev.platform;
 
-            // Metadatos
-            var metaRow = document.createElement('div');
-            metaRow.className = 'master-meta-row';
+            var platBadge = document.createElement('span');
+            platBadge.className = 'badge-platform';
+            platBadge.textContent = platName;
+            titleRow.appendChild(platBadge);
 
             var plCount = (dev.playlists_count !== undefined) ? dev.playlists_count : ((dev.playlists && dev.playlists.length) || 0);
+            var plBadge = document.createElement('span');
+            plBadge.className = 'badge-playlists';
+            plBadge.textContent = plCount + (plCount === 1 ? ' lista' : ' listas');
+            titleRow.appendChild(plBadge);
 
+            main.appendChild(titleRow);
+
+            var metaRow = document.createElement('div');
+            metaRow.className = 'master-row-meta';
             metaRow.innerHTML = 
-                '<div class="master-meta-item mono"><strong>MAC:</strong> ' + dev.mac + '</div>' +
-                '<div class="master-meta-item mono"><strong>Device Key:</strong> ' + (dev.key || dev.device_key || '------') + '</div>' +
-                '<div class="master-meta-item"><strong>Plataforma:</strong> ' + (dev.platform || 'samsung-tizen') + ' v' + (dev.app_version || '3.5.0') + '</div>' +
-                '<div class="master-meta-item"><strong>Última conex.:</strong> ' + formatDate(dev.last_seen) + '</div>' +
-                '<div class="master-meta-item"><strong>Listas Xtream:</strong> ' + plCount + '</div>';
+                '<span class="mono">' + dev.mac + '</span>' +
+                '<span class="meta-sep">·</span>' +
+                '<span>Key: <strong class="mono">' + (dev.key || dev.device_key || '------') + '</strong></span>' +
+                '<span class="meta-sep">·</span>' +
+                '<span>Conex.: ' + formatDate(dev.last_seen) + '</span>';
+            main.appendChild(metaRow);
 
-            card.appendChild(metaRow);
+            row.appendChild(main);
 
-            // Acciones
+            // Acciones compactas
             var actions = document.createElement('div');
-            actions.className = 'master-device-actions';
-
-            var btnEditDev = document.createElement('button');
-            btnEditDev.className = 'btn btn-secondary';
-            btnEditDev.textContent = 'Editar TV';
-            btnEditDev.onclick = function () {
-                openEditDeviceModal(dev);
-            };
-            actions.appendChild(btnEditDev);
+            actions.className = 'master-row-actions';
 
             var btnManagePl = document.createElement('button');
-            btnManagePl.className = 'btn btn-primary';
-            btnManagePl.textContent = 'Gestionar Listas';
+            btnManagePl.className = 'btn btn-primary btn-sm';
+            btnManagePl.textContent = 'Listas';
             btnManagePl.onclick = function () {
                 openMasterDeviceDetail(dev);
             };
             actions.appendChild(btnManagePl);
 
+            var btnEditDev = document.createElement('button');
+            btnEditDev.className = 'btn btn-secondary btn-sm';
+            btnEditDev.textContent = 'Editar';
+            btnEditDev.onclick = function () {
+                openEditDeviceModal(dev);
+            };
+            actions.appendChild(btnEditDev);
+
             var btnDelDev = document.createElement('button');
-            btnDelDev.className = 'btn btn-danger';
-            btnDelDev.textContent = 'Eliminar TV';
+            btnDelDev.className = 'btn btn-danger btn-sm';
+            btnDelDev.textContent = 'Eliminar';
             btnDelDev.onclick = function () {
                 masterDeleteDevice(dev);
             };
             actions.appendChild(btnDelDev);
 
-            card.appendChild(actions);
-            container.appendChild(card);
+            row.appendChild(actions);
+            container.appendChild(row);
         });
     }
 
@@ -579,6 +694,8 @@
         state.activeMasterDevice = null;
         closePlaylistModal();
         closeEditDeviceModal();
+        closeBulkServerModal();
+        closeCopyPlaylistModal();
         var listView = document.getElementById('masterDevicesListView');
         var detailView = document.getElementById('masterDeviceDetailView');
         if (listView) listView.classList.remove('hidden');
@@ -857,6 +974,14 @@
                 openPlaylistModal('master', pl);
             };
             actions.appendChild(btnEdit);
+
+            var btnCopy = document.createElement('button');
+            btnCopy.className = 'btn btn-secondary';
+            btnCopy.textContent = '📋 Copiar a TV';
+            btnCopy.onclick = function () {
+                openCopyPlaylistModal(pl);
+            };
+            actions.appendChild(btnCopy);
 
             var btnDel = document.createElement('button');
             btnDel.className = 'btn btn-danger';
@@ -1146,13 +1271,275 @@
     }
 
     // ============================================================
+    // 6. CAMBIO MASIVO DE SERVIDOR Y COPIAR LISTA ENTRE TVs
+    // ============================================================
+    function openBulkServerModal() {
+        var modal = document.getElementById('modalBulkServer');
+        if (!modal) return;
+
+        var serversSet = {};
+        state.masterDevices.forEach(function (d) {
+            if (d.playlists && Array.isArray(d.playlists)) {
+                d.playlists.forEach(function (p) {
+                    if (p.server) {
+                        var s = p.server.trim();
+                        serversSet[s] = true;
+                    }
+                });
+            }
+        });
+
+        var dataList = document.getElementById('bulkOldServerList');
+        if (dataList) {
+            dataList.innerHTML = '';
+            Object.keys(serversSet).sort().forEach(function (srv) {
+                var opt = document.createElement('option');
+                opt.value = srv;
+                dataList.appendChild(opt);
+            });
+        }
+
+        var oldInput = document.getElementById('bulkOldServer');
+        var newInput = document.getElementById('bulkNewServer');
+        if (oldInput) oldInput.value = '';
+        if (newInput) newInput.value = '';
+
+        updateBulkServerPreview('');
+        modal.classList.remove('hidden');
+    }
+
+    function closeBulkServerModal() {
+        var modal = document.getElementById('modalBulkServer');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function updateBulkServerPreview(targetServer) {
+        var box = document.getElementById('bulkPreviewBox');
+        if (!box) return;
+
+        var clean = (targetServer || '').trim().toLowerCase();
+        if (!clean || clean.length < 4) {
+            box.className = 'bulk-preview-box';
+            box.textContent = 'Introduce el servidor actual para calcular las listas afectadas.';
+            return;
+        }
+
+        var affectedPlaylists = 0;
+        var affectedDevices = 0;
+
+        state.masterDevices.forEach(function (d) {
+            var devHasMatch = false;
+            if (d.playlists && Array.isArray(d.playlists)) {
+                d.playlists.forEach(function (p) {
+                    if (p.server && p.server.toLowerCase().trim() === clean) {
+                        affectedPlaylists++;
+                        devHasMatch = true;
+                    }
+                });
+            }
+            if (devHasMatch) affectedDevices++;
+        });
+
+        if (affectedPlaylists > 0) {
+            box.className = 'bulk-preview-box match';
+            box.innerHTML = 'Se actualizarán <strong>' + affectedPlaylists + (affectedPlaylists === 1 ? ' lista</strong> en ' : ' listas</strong> en ') +
+                            '<strong>' + affectedDevices + (affectedDevices === 1 ? ' televisor</strong>' : ' televisores</strong>') +
+                            ' (manteniendo sus usuarios y contraseñas intactos).';
+        } else {
+            box.className = 'bulk-preview-box';
+            box.textContent = 'No se han detectado listas con esa URL de servidor en las TVs cargadas (se enviará igualmente la orden al servidor).';
+        }
+    }
+
+    async function handleBulkServerSubmit(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        var oldUrl = document.getElementById('bulkOldServer').value.trim();
+        var newUrl = document.getElementById('bulkNewServer').value.trim();
+        var applyBtn = document.getElementById('btnApplyBulkServer');
+
+        if (!oldUrl || !newUrl) {
+            showToast('Introduce el servidor actual y el nuevo servidor', 'error');
+            return;
+        }
+
+        if (!/^https?:\/\//i.test(newUrl)) {
+            showToast('El nuevo servidor debe comenzar con http:// o https://', 'error');
+            return;
+        }
+
+        if (applyBtn) {
+            applyBtn.disabled = true;
+            applyBtn.textContent = 'Actualizando...';
+        }
+
+        try {
+            var payload = {
+                p_password: state.masterPassword,
+                p_old_url: oldUrl,
+                p_new_url: newUrl
+            };
+            var res = await callRpc('master_replace_server_url', payload);
+            if (res && res.ok !== false) {
+                var count = (res.updated_count !== undefined) ? res.updated_count : (typeof res === 'number' ? res : 'todas las');
+                showToast('Servidor actualizado: ' + count + ' listas modificadas', 'success');
+                closeBulkServerModal();
+                await loadMasterDevices();
+                if (state.activeMasterDevice) {
+                    loadMasterDevicePlaylists();
+                }
+            } else {
+                var errMsg = (res && res.error) ? res.error : 'Error al cambiar servidor masivo';
+                showToast(errMsg, 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        } finally {
+            if (applyBtn) {
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Aplicar cambio masivo';
+            }
+        }
+    }
+
+    function openCopyPlaylistModal(pl) {
+        state.copyingPlaylist = pl;
+        var modal = document.getElementById('modalCopyPlaylist');
+        if (!modal) return;
+
+        var sourceDisplay = document.getElementById('copyPlaylistSourceName');
+        if (sourceDisplay) {
+            sourceDisplay.textContent = (pl.name || 'Lista sin nombre') + ' · ' + maskServerUrl(pl.server);
+        }
+
+        var select = document.getElementById('copyTargetDeviceSelect');
+        var warnBox = document.getElementById('copyWarningBox');
+        var confirmBtn = document.getElementById('btnConfirmCopyPlaylist');
+        var isDefCheck = document.getElementById('copyPlaylistIsDefault');
+
+        if (isDefCheck) isDefCheck.checked = false;
+
+        var activeMac = state.activeMasterDevice ? state.activeMasterDevice.mac : '';
+        var candidateDevs = state.masterDevices.filter(function (d) {
+            return d.mac !== activeMac;
+        });
+
+        if (select) select.innerHTML = '';
+
+        if (candidateDevs.length === 0) {
+            if (warnBox) warnBox.classList.remove('hidden');
+            if (select) select.disabled = true;
+            if (confirmBtn) confirmBtn.disabled = true;
+        } else {
+            if (warnBox) warnBox.classList.add('hidden');
+            if (select) {
+                select.disabled = false;
+                candidateDevs.forEach(function (d) {
+                    var opt = document.createElement('option');
+                    opt.value = d.mac;
+                    opt.textContent = (d.alias || 'Sin alias') + ' (' + d.mac + ')';
+                    select.appendChild(opt);
+                });
+            }
+            if (confirmBtn) confirmBtn.disabled = false;
+        }
+
+        modal.classList.remove('hidden');
+    }
+
+    function closeCopyPlaylistModal() {
+        state.copyingPlaylist = null;
+        var modal = document.getElementById('modalCopyPlaylist');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    async function handleCopyPlaylistSubmit(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        var pl = state.copyingPlaylist;
+        if (!pl) return;
+
+        var select = document.getElementById('copyTargetDeviceSelect');
+        var targetMac = select ? select.value : '';
+        if (!targetMac) {
+            showToast('Selecciona un televisor destino', 'error');
+            return;
+        }
+
+        var isDefault = !!(document.getElementById('copyPlaylistIsDefault') && document.getElementById('copyPlaylistIsDefault').checked);
+        var confirmBtn = document.getElementById('btnConfirmCopyPlaylist');
+
+        var targetDev = null;
+        for (var i = 0; i < state.masterDevices.length; i++) {
+            if (state.masterDevices[i].mac === targetMac) {
+                targetDev = state.masterDevices[i];
+                break;
+            }
+        }
+        var devKey = (targetDev && (targetDev.key || targetDev.device_key)) || '';
+
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Copiando...';
+        }
+
+        try {
+            var payload = {
+                p_password: state.masterPassword,
+                p_mac: targetMac,
+                p_id: null,
+                p_name: pl.name,
+                p_server: pl.server,
+                p_user: pl.username || pl.user || '',
+                p_pass: pl.password || pl.pass || '',
+                p_is_default: isDefault
+            };
+
+            var res = null;
+            try {
+                res = await callRpc('master_upsert_playlist', payload);
+            } catch (rpcErr) {
+                if (devKey) {
+                    res = await callRpc('ibo_upsert_playlist', {
+                        p_id: null,
+                        p_mac: targetMac,
+                        p_key: devKey,
+                        p_name: pl.name,
+                        p_server: pl.server,
+                        p_user: pl.username || pl.user || '',
+                        p_pass: pl.password || pl.pass || '',
+                        p_is_default: isDefault
+                    });
+                } else {
+                    throw rpcErr;
+                }
+            }
+
+            if (res && res.ok !== false) {
+                var destName = (targetDev && targetDev.alias) ? targetDev.alias : targetMac;
+                showToast('Lista copiada con éxito a ' + destName, 'success');
+                closeCopyPlaylistModal();
+                await loadMasterDevices();
+            } else {
+                var errMsg = (res && res.error) ? res.error : 'Error al copiar lista al televisor destino';
+                showToast(errMsg, 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        } finally {
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Copiar Lista';
+            }
+        }
+    }
+
+    // ============================================================
     // 7. INICIALIZACIÓN Y EVENT LISTENERS
     // ============================================================
     function init() {
         // Indicador de versión visual para verificación de despliegue y caché
         var bBadge = document.getElementById('brandBadge') || document.querySelector('.brand-badge');
         if (bBadge) {
-            bBadge.textContent = 'PORTAL REMOTO · v3.5.3';
+            bBadge.textContent = 'PORTAL REMOTO · v3.6.0';
         }
 
         // Selector de Pestañas
@@ -1200,6 +1587,42 @@
             openPlaylistModal('master', null);
         });
 
+        // Buscador y Filtros en Panel Maestro
+        var searchInput = document.getElementById('masterSearchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                state.masterFilters.search = this.value;
+                renderMasterDashboard();
+            });
+        }
+
+        var filterStatus = document.getElementById('masterFilterStatus');
+        if (filterStatus) {
+            filterStatus.addEventListener('change', function () {
+                state.masterFilters.status = this.value;
+                renderMasterDashboard();
+            });
+        }
+
+        var filterPlatform = document.getElementById('masterFilterPlatform');
+        if (filterPlatform) {
+            filterPlatform.addEventListener('change', function () {
+                state.masterFilters.platform = this.value;
+                renderMasterDashboard();
+            });
+        }
+
+        var sortSelect = document.getElementById('masterSortSelect');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', function () {
+                state.masterFilters.sort = this.value;
+                renderMasterDashboard();
+            });
+        }
+
+        var btnOpenBulk = document.getElementById('btnOpenBulkServerModal');
+        if (btnOpenBulk) btnOpenBulk.addEventListener('click', openBulkServerModal);
+
         // Modales
         var btnCancelPl = document.getElementById('btnCancelPlaylistModal');
         if (btnCancelPl) btnCancelPl.addEventListener('click', closePlaylistModal);
@@ -1212,6 +1635,27 @@
 
         var formDev = document.getElementById('formEditDeviceModal');
         if (formDev) formDev.addEventListener('submit', handleSaveDevice);
+
+        // Modal Cambio Masivo de Servidor
+        var btnCancelBulk = document.getElementById('btnCancelBulkServer');
+        if (btnCancelBulk) btnCancelBulk.addEventListener('click', closeBulkServerModal);
+
+        var formBulk = document.getElementById('formBulkServerModal');
+        if (formBulk) formBulk.addEventListener('submit', handleBulkServerSubmit);
+
+        var bulkOldInput = document.getElementById('bulkOldServer');
+        if (bulkOldInput) {
+            bulkOldInput.addEventListener('input', function () {
+                updateBulkServerPreview(this.value);
+            });
+        }
+
+        // Modal Copiar Lista a otra TV
+        var btnCancelCopy = document.getElementById('btnCancelCopyPlaylist');
+        if (btnCancelCopy) btnCancelCopy.addEventListener('click', closeCopyPlaylistModal);
+
+        var formCopy = document.getElementById('formCopyPlaylistModal');
+        if (formCopy) formCopy.addEventListener('submit', handleCopyPlaylistSubmit);
 
         // Ojos de contraseña
         var btnEyeMaster = document.getElementById('btnToggleMasterPass');

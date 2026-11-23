@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Carlicos Portal">
 
-    <link rel="stylesheet" href="style.css?v=353">
+    <link rel="stylesheet" href="style.css?v=360">
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -150,6 +150,43 @@
                         <button id="btnMasterLogout" class="btn btn-secondary" type="button">
                             <span>Cerrar sesión maestra</span>
                         </button>
+                    </div>
+
+                    <!-- Barra de Búsqueda, Filtros y Acciones Globales -->
+                    <div class="master-filter-bar">
+                        <div class="filter-search-wrap">
+                            <input id="masterSearchInput" class="input-text" type="search" placeholder="🔍 Buscar por alias, MAC, key, lista o servidor..." autocomplete="off">
+                        </div>
+                        <div class="filter-selects-row">
+                            <div class="filter-control">
+                                <label for="masterFilterStatus" class="filter-label">Estado:</label>
+                                <select id="masterFilterStatus" class="input-select">
+                                    <option value="all">Todos</option>
+                                    <option value="active">Activas</option>
+                                    <option value="paused">Pausadas</option>
+                                </select>
+                            </div>
+                            <div class="filter-control">
+                                <label for="masterFilterPlatform" class="filter-label">Plataforma:</label>
+                                <select id="masterFilterPlatform" class="input-select">
+                                    <option value="all">Todas</option>
+                                    <option value="samsung-tizen">Samsung Tizen</option>
+                                    <option value="lg-webos">LG webOS</option>
+                                    <option value="android">Android</option>
+                                </select>
+                            </div>
+                            <div class="filter-control">
+                                <label for="masterSortSelect" class="filter-label">Orden:</label>
+                                <select id="masterSortSelect" class="input-select">
+                                    <option value="last_seen">Última conexión</option>
+                                    <option value="alias">Alias (A - Z)</option>
+                                    <option value="playlists">Más listas</option>
+                                </select>
+                            </div>
+                            <button id="btnOpenBulkServerModal" class="btn btn-secondary btn-bulk-server" type="button">
+                                <span>🌐 Cambiar Servidor Masivo</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="section-header">
@@ -291,9 +328,82 @@
         </div>
     </div>
 
+    <!-- ============================================================
+         MODAL 3: CAMBIO MASIVO DE SERVIDOR (Panel Maestro)
+         ============================================================ -->
+    <div id="modalBulkServer" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-box">
+            <div class="modal-title">
+                <span>🌐 Cambiar Servidor en Todas las Listas</span>
+            </div>
+            <form id="formBulkServerModal">
+                <div class="form-desc" style="margin-bottom: 14px; font-size: 0.88rem; color: var(--text-secondary); line-height: 1.4;">
+                    Reemplaza masivamente la URL del servidor IPTV en todas las listas registradas conservando intactos los usuarios y contraseñas.
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="bulkOldServer">Servidor actual (a reemplazar)</label>
+                    <input id="bulkOldServer" list="bulkOldServerList" class="input-text input-mono" type="url" placeholder="http://servidor-antiguo.com:8080" required autocomplete="off">
+                    <datalist id="bulkOldServerList"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="bulkNewServer">Nuevo servidor</label>
+                    <input id="bulkNewServer" class="input-text input-mono" type="url" placeholder="http://servidor-nuevo.com:8080" required autocomplete="off">
+                </div>
+
+                <!-- Caja de previsualización dinámica -->
+                <div id="bulkPreviewBox" class="bulk-preview-box">
+                    Introduce el servidor actual para calcular las listas afectadas.
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" id="btnCancelBulkServer" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" id="btnApplyBulkServer" class="btn btn-primary">Aplicar cambio masivo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         MODAL 4: COPIAR LISTA A OTRA TV (Panel Maestro)
+         ============================================================ -->
+    <div id="modalCopyPlaylist" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-box">
+            <div class="modal-title">
+                <span>📋 Copiar Lista a otra TV</span>
+            </div>
+            <form id="formCopyPlaylistModal">
+                <div class="form-group">
+                    <label class="form-label">Lista a duplicar</label>
+                    <div id="copyPlaylistSourceName" class="copy-source-display">--</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="copyTargetDeviceSelect">Televisor de destino</label>
+                    <select id="copyTargetDeviceSelect" class="input-select" required style="width: 100%; height: 42px;"></select>
+                </div>
+
+                <div class="form-checkbox-row">
+                    <input id="copyPlaylistIsDefault" type="checkbox">
+                    <label class="form-checkbox-label" for="copyPlaylistIsDefault">Marcar como lista principal en la TV destino</label>
+                </div>
+
+                <div id="copyWarningBox" class="copy-warning-box hidden">
+                    Necesitas al menos 2 televisores registrados para copiar listas.
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" id="btnCancelCopyPlaylist" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" id="btnConfirmCopyPlaylist" class="btn btn-primary">Copiar Lista</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
-    <script src="app.js?v=353"></script>
+    <script src="app.js?v=360"></script>
 </body>
 </html>
