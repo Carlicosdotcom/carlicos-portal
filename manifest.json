@@ -1,0 +1,18 @@
+{
+  "name": "Carlicos Portal Maestro",
+  "short_name": "Carlicos Portal",
+  "description": "Portal de gestión remota y panel maestro para Carlicos Player",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#08070B",
+  "theme_color": "#D91E2A",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

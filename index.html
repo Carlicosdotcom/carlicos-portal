@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Carlicos Player · Portal Remoto</title>
+    
+    <!-- PWA Meta -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <meta name="theme-color" content="#D91E2A">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Carlicos Portal">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Cabecera Fija -->
+    <header class="app-header">
+        <div class="brand-bar">
+            <div class="brand-logo-wrap">
+                <img src="icon.svg" alt="Carlicos Icon" class="brand-icon">
+                <span class="brand-title">Carlicos Player</span>
+            </div>
+            <span class="brand-badge">PORTAL REMOTO</span>
+        </div>
+
+        <nav class="tabs-nav" role="tablist">
+            <button id="tabBtnIbo" class="tab-btn active" role="tab" aria-selected="true">
+                <span>📱</span> Acceso IBO (MAC + Key)
+            </button>
+            <button id="tabBtnMaster" class="tab-btn" role="tab" aria-selected="false">
+                <span>👑</span> Panel Maestro
+            </button>
+        </nav>
+    </header>
+
+    <!-- Contenedor Principal -->
+    <main class="main-content">
+        <!-- ============================================================
+             PESTAÑA 1: MODO IBO (Dispositivo individual)
+             ============================================================ -->
+        <section id="paneIbo" class="tab-pane active" role="tabpanel">
+            <!-- 1.1 Login IBO -->
+            <div id="iboLoginForm" class="card">
+                <div class="card-title">Acceso por Dispositivo</div>
+                <div class="card-desc">Introduce la dirección MAC y la clave (Device Key) que aparecen en la pantalla de Mis Listas de tu televisor.</div>
+                
+                <form id="formIboAuth">
+                    <div class="form-group">
+                        <label class="form-label" for="iboInputMac">Dirección MAC del Televisor</label>
+                        <input id="iboInputMac" class="input-text input-mono" type="text" placeholder="00:11:22:33:44:55" maxlength="17" required autocomplete="off" autocapitalize="characters">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="iboInputKey">Device Key (Clave de 6 dígitos)</label>
+                        <input id="iboInputKey" class="input-text input-mono" type="text" placeholder="123456" maxlength="6" pattern="[0-9]{6}" required autocomplete="off">
+                    </div>
+                    <button id="btnIboLogin" class="btn btn-primary btn-full" type="submit">
+                        <span>Entrar a mi Televisor</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- 1.2 Dashboard IBO (oculto hasta login) -->
+            <div id="iboDashboard" class="hidden">
+                <!-- Tarjeta Info TV -->
+                <div class="card">
+                    <div class="card-title">
+                        <span id="iboDeviceTitle">Mi Televisor</span>
+                        <span id="iboStatusBadge" class="status-badge active">ACTIVA</span>
+                    </div>
+                    <div class="device-info-grid">
+                        <div class="device-info-item">
+                            <div class="device-info-label">MAC</div>
+                            <div id="iboDisplayMac" class="device-info-val mono">--:--:--:--:--:--</div>
+                        </div>
+                        <div class="device-info-item">
+                            <div class="device-info-label">Plataforma / Versión</div>
+                            <div id="iboDisplayPlatform" class="device-info-val">--</div>
+                        </div>
+                        <div class="device-info-item">
+                            <div class="device-info-label">Última Sincronización</div>
+                            <div id="iboDisplayLastSeen" class="device-info-val">--</div>
+                        </div>
+                    </div>
+                    <button id="btnIboLogout" class="btn btn-secondary" type="button">
+                        <span>Cerrar sesión de esta TV</span>
+                    </button>
+                </div>
+
+                <!-- Gestor de Listas Xtream de la TV -->
+                <div class="card">
+                    <div class="section-header">
+                        <div class="section-title">Listas Xtream Asignadas</div>
+                        <button id="btnIboAddPlaylist" class="btn btn-primary" type="button">
+                            <span>+ Añadir Lista Xtream</span>
+                        </button>
+                    </div>
+                    <div id="iboPlaylistsList">
+                        <!-- Rellenado dinámicamente -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================
+             PESTAÑA 2: PANEL MAESTRO PRIVADO
+             ============================================================ -->
+        <section id="paneMaster" class="tab-pane" role="tabpanel">
+            <!-- 2.1 Login Maestro -->
+            <div id="masterLoginForm" class="card">
+                <div class="card-title">Acceso al Panel Maestro</div>
+                <div class="card-desc">Área privada de administración. Introduce la clave maestra configurada en el servidor.</div>
+                
+                <form id="formMasterAuth">
+                    <div class="form-group">
+                        <label class="form-label" for="masterInputPass">Contraseña Maestra</label>
+                        <div class="input-pass-wrap">
+                            <input id="masterInputPass" class="input-text" type="password" placeholder="Introduce la contraseña maestra" required autocomplete="current-password">
+                            <button type="button" class="btn-toggle-eye" id="btnToggleMasterPass" aria-label="Mostrar contraseña">👁️</button>
+                        </div>
+                    </div>
+                    <button id="btnMasterLogin" class="btn btn-primary btn-full" type="submit">
+                        <span>Acceder al Panel</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- 2.2 Dashboard Maestro (oculto hasta login) -->
+            <div id="masterDashboard" class="hidden">
+                <div class="master-toolbar">
+                    <button id="btnMasterRefresh" class="btn btn-secondary" type="button">
+                        <span>↻ Actualizar dispositivos</span>
+                    </button>
+                    <button id="btnMasterLogout" class="btn btn-secondary" type="button">
+                        <span>Cerrar sesión maestra</span>
+                    </button>
+                </div>
+
+                <div class="section-header">
+                    <div class="section-title">Televisores Registrados (<span id="masterDeviceCount">0</span>)</div>
+                </div>
+
+                <div id="masterDevicesList">
+                    <!-- Rellenado dinámicamente -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ============================================================
+         MODAL 1: ALTA / EDICIÓN DE LISTA XTREAM (Común para IBO y Maestro)
+         ============================================================ -->
+    <div id="modalPlaylist" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-box">
+            <div class="modal-title">
+                <span id="modalPlaylistTitle">Añadir Lista Xtream</span>
+            </div>
+            <form id="formPlaylistModal">
+                <input type="hidden" id="modalPlaylistId" value="">
+                
+                <div class="form-group">
+                    <label class="form-label" for="modalPlName">Nombre de la lista</label>
+                    <input id="modalPlName" class="input-text" type="text" placeholder="ej. Mi Lista Familiar" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="modalPlServer">URL del Servidor</label>
+                    <input id="modalPlServer" class="input-text input-mono" type="url" placeholder="http://servidor.com:8080" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="modalPlUser">Usuario</label>
+                    <input id="modalPlUser" class="input-text" type="text" placeholder="Usuario de la línea" required autocomplete="off">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="modalPlPass">Contraseña</label>
+                    <div class="input-pass-wrap">
+                        <input id="modalPlPass" class="input-text" type="password" placeholder="Contraseña de la línea" required autocomplete="new-password">
+                        <button type="button" class="btn-toggle-eye" id="btnTogglePlPass" aria-label="Mostrar contraseña">👁️</button>
+                    </div>
+                </div>
+
+                <div class="form-checkbox-row">
+                    <input id="modalPlDefault" type="checkbox">
+                    <label class="form-checkbox-label" for="modalPlDefault">Marcar como lista principal por defecto</label>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" id="btnCancelPlaylistModal" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" id="btnSavePlaylistModal" class="btn btn-primary">Guardar Lista</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         MODAL 2: EDITAR TELEVISOR (Panel Maestro)
+         ============================================================ -->
+    <div id="modalEditDevice" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-box">
+            <div class="modal-title">
+                <span>Editar Televisor</span>
+            </div>
+            <form id="formEditDeviceModal">
+                <input type="hidden" id="modalEditDeviceMac" value="">
+
+                <div class="form-group">
+                    <label class="form-label">MAC del Dispositivo</label>
+                    <input id="modalEditDeviceMacDisplay" class="input-text input-mono" type="text" disabled>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="modalEditDeviceAlias">Alias / Nombre identificador</label>
+                    <input id="modalEditDeviceAlias" class="input-text" type="text" placeholder="ej. TV Salón, Habitación, etc.">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="modalEditDeviceKey">Nueva Device Key (Opcional, 6 dígitos)</label>
+                    <input id="modalEditDeviceKey" class="input-text input-mono" type="text" placeholder="Dejar en blanco para no cambiar" maxlength="6" pattern="[0-9]{6}">
+                </div>
+
+                <div class="form-checkbox-row">
+                    <input id="modalEditDeviceActive" type="checkbox">
+                    <label class="form-checkbox-label" for="modalEditDeviceActive">Dispositivo Activo (desmarcar para pausar)</label>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" id="btnCancelEditDeviceModal" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" id="btnSaveEditDeviceModal" class="btn btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         MODAL 3: GESTOR DE LISTAS DE UN DISPOSITIVO (Panel Maestro)
+         ============================================================ -->
+    <div id="modalMasterPlaylists" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-box" style="max-width: 680px;">
+            <div class="modal-title">
+                <div>
+                    <span id="modalMasterPlTitle">Listas de Televisor</span>
+                    <div id="modalMasterPlSubtitle" style="font-size: 0.82rem; color: var(--text-muted); font-family: var(--font-mono); font-weight: normal; margin-top: 4px;">--</div>
+                </div>
+            </div>
+
+            <div class="section-header" style="margin-top: 10px;">
+                <button id="btnMasterAddPlaylistForDevice" class="btn btn-primary" type="button">
+                    <span>+ Añadir Lista Xtream</span>
+                </button>
+            </div>
+
+            <div id="modalMasterPlaylistsContainer" style="max-height: 50vh; overflow-y: auto; margin-bottom: 20px;">
+                <!-- Rellenado dinámicamente -->
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" id="btnCloseMasterPlaylistsModal" class="btn btn-secondary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
