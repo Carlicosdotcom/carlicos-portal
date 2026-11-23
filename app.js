@@ -468,22 +468,28 @@
         var detailView = document.getElementById('masterDeviceDetailView');
 
         if (!state.masterPassword) {
-            if (loginForm) loginForm.style.display = 'block';
-            if (dashboard) dashboard.className = 'hidden';
+            if (loginForm) {
+                loginForm.classList.remove('hidden');
+                loginForm.style.display = '';
+            }
+            if (dashboard) dashboard.classList.add('hidden');
             return;
         }
 
-        if (loginForm) loginForm.style.display = 'none';
-        if (dashboard) dashboard.className = '';
+        if (loginForm) {
+            loginForm.classList.add('hidden');
+            loginForm.style.display = 'none';
+        }
+        if (dashboard) dashboard.classList.remove('hidden');
 
         // Mantener o restaurar la sub-vista adecuada
         if (state.activeMasterDevice) {
-            if (listView) listView.className = 'hidden';
-            if (detailView) detailView.className = '';
+            if (listView) listView.classList.add('hidden');
+            if (detailView) detailView.classList.remove('hidden');
             renderMasterDeviceDetailSummary(state.activeMasterDevice);
         } else {
-            if (listView) listView.className = '';
-            if (detailView) detailView.className = 'hidden';
+            if (listView) listView.classList.remove('hidden');
+            if (detailView) detailView.classList.add('hidden');
         }
 
         var countEl = document.getElementById('masterDeviceCount');
@@ -575,8 +581,8 @@
         closeEditDeviceModal();
         var listView = document.getElementById('masterDevicesListView');
         var detailView = document.getElementById('masterDeviceDetailView');
-        if (listView) listView.className = '';
-        if (detailView) detailView.className = 'hidden';
+        if (listView) listView.classList.remove('hidden');
+        if (detailView) detailView.classList.add('hidden');
         var passInput = document.getElementById('masterInputPass');
         if (passInput) passInput.value = '';
         renderMasterDashboard();
@@ -693,8 +699,8 @@
 
         var listView = document.getElementById('masterDevicesListView');
         var detailView = document.getElementById('masterDeviceDetailView');
-        if (listView) listView.className = 'hidden';
-        if (detailView) detailView.className = '';
+        if (listView) listView.classList.add('hidden');
+        if (detailView) detailView.classList.remove('hidden');
 
         window.scrollTo(0, 0);
         loadMasterDevicePlaylists();
@@ -738,8 +744,8 @@
         state.activeMasterDevice = null;
         var listView = document.getElementById('masterDevicesListView');
         var detailView = document.getElementById('masterDeviceDetailView');
-        if (listView) listView.className = '';
-        if (detailView) detailView.className = 'hidden';
+        if (listView) listView.classList.remove('hidden');
+        if (detailView) detailView.classList.add('hidden');
         loadMasterDevices();
     }
 
@@ -1143,6 +1149,12 @@
     // 7. INICIALIZACIÓN Y EVENT LISTENERS
     // ============================================================
     function init() {
+        // Indicador de versión visual para verificación de despliegue y caché
+        var bBadge = document.getElementById('brandBadge') || document.querySelector('.brand-badge');
+        if (bBadge) {
+            bBadge.textContent = 'PORTAL REMOTO · v3.5.3';
+        }
+
         // Selector de Pestañas
         var tabIbo = document.getElementById('tabBtnIbo');
         var tabMaster = document.getElementById('tabBtnMaster');

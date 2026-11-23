@@ -729,3 +729,8 @@ body {
         min-width: 120px;
     }
 }
+
+/* Utilidad de visibilidad global con máxima especificidad */
+.hidden {
+    display: none !important;
+}
